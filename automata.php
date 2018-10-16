@@ -1,4 +1,12 @@
+#!/usr/bin/ php
 <?php
+
+function logout() {
+    $target = "https://entrada.sesisenaisp.org.br/dana-na/auth/logout.cgi";
+    http_get_withheader($target,"");    
+}
+
+
 // Bibliotecas
 include('LIB_http.php');
 include('LIB_parse.php');
@@ -7,7 +15,7 @@ include('LIB_parse.php');
 // Bibliotecas Spreadsheet
 require 'vendor/autoload.php';
 
-
+syslog(LOG_INFO, "Executando Automata");
 
 // Aceitar a politica de segurança da informação
 $data_array['sn-preauth-proceed'] = "Aceitar";
@@ -24,9 +32,23 @@ $data_array_2['username']="sn73442";
 $data_array_2['password']="sesisenai@18";
 $data_array_2['realm']="Sesi-Senai";
 
-http("https://entrada.sesisenaisp.org.br/dana-na/auth/url_0/login.cgi",
+/*http("https://entrada.sesisenaisp.org.br/dana-na/auth/url_0/login.cgi",
      "https://entrada.sesisenaisp.org.br/dana-na/auth/url_0/welcome.cgi",
-     "POST",$data_array_2,INCL_HEAD);
+     "POST",$data_array_2,INCL_HEAD);*/
+
+$response_lg = http_post_withheader("https://entrada.sesisenaisp.org.br/dana-na/auth/url_0/login.cgi",
+                                 "https://entrada.sesisenaisp.org.br/dana-na/auth/url_0/welcome.cgi",
+                                 $data_array_2);
+
+
+if(strstr($response_lg['FILE'],"There are already other user sessions in progress")) {
+    echo "\n";
+    echo "Já ha uma sessão em andamento";
+    echo "\n";
+    syslog(LOG_INFO,"Automata - Saindo por sessão em andamento");
+    return;
+}
+
 
 // Acesso ao SGSET
 $response = http_get_withheader("https://entrada.sesisenaisp.org.br/,DanaInfo=sgset.sp.senai.br,SSO=U+",
@@ -115,13 +137,54 @@ $escreve->setEnclosure('"');
 $escreve->setLineEnding("\n");
 $escreve->save("./teste.csv");
 
-$sql = "load data local infile '" . getcwd() . "/teste.csv' into table senai.tb_ofe_oferta103 character set UTF8 fields terminated by ';' optionally enclosed by '\"'  ignore 1 lines (ofe_atendimento,ofe_tipo_curso,ofe_curso,ofe_carga_horaria,ofe_area_curso,ofe_segmento_area,ofe_turma,ofe_turno,ofe_local_realizado,ofe_situacao,ofe_horario_inicio,ofe_horario_fim,@data1,@data2,ofe_dia_semana,ofe_modalidade,ofe_matriculas_estimadas,ofe_matriculas_realizadas,ofe_matriculas_evadidas,ofe_matriculas_ativas,ofe_matriculas_certificadas,ofe_docente,ofe_valor,ofe_condicoes) set ofe_data_inicio = date_add('1899-12-30',interval @data1 day), ofe_data_fim = date_add('1899-12-30',interval @data2 day),ofe_data_hora_consulta=now();";
+
+
+
+$sql = "load data local infile '" . getcwd() . "/teste.csv' into table senai.tb_ofe_oferta103 character set UTF8 fields terminated by ';' optionally enclosed by '\"'  ignore 1 lines (ofe_atendimento,ofe_tipo_curso,ofe_curso,ofe_carga_horaria,ofe_area_curso,ofe_segmento_area,ofe_turma,ofe_turno,ofe_local_realizado,ofe_situacao,ofe_horario_inicio,ofe_horario_fim,@data1,@data2,ofe_dia_semana,ofe_modalidade,ofe_matriculas_estimadas,ofe_matriculas_realizadas,ofe_matriculas_evadidas,ofe_matriculas_ativas,ofe_matriculas_certificadas,ofe_docente,ofe_valor,ofe_condicoes) set ofe_data_inicio = date_add('1899-12-30',interval @data1 day), ofe_data_fim = date_add('1899-12-30',interval @data2 day),ofe_data_hora_consulta=now(),env_id=last_insert_id();";
 
 $mysql_conn = new mysqli("localhost", "senaiuser", "M#str@d0", "senai");
+
+$sql_ultimo_hash = "select env_hash from tb_env_envios order by env_dataenvio desc limit 1;";
+
+
 if ($mysql_conn->connect_errno) {
     echo "Failed to connect to MySQL: (" . $mysql_conn->connect_errno . ") " . $mysql_conn->connect_error;
 }
 echo $mysql_conn->host_info . "\n";
+
+
+$result_hash = $mysql_conn->query($sql_ultimo_hash);
+
+echo "\n";
+echo "Valor retornado na tabela envios";
+echo $result_hash->num_rows;
+echo "\n";
+
+if($result_hash->num_rows>0) {
+    $result_array = $result_hash->fetch_array();
+    $hash_atual = $result_array['env_hash'];
+    echo "\n";
+    echo "Hash na tabela:\n";
+    echo $hash_atual;
+    echo "\n";
+    if ($hash_atual == hash_file("sha256","./teste.csv")) {
+        echo "\nArquivo sem modificação não será inserido\n";
+        $result_hash->close();
+        syslog(LOG_INFO,"Sem modificação");
+        logout();
+        return;
+    }
+}
+
+
+$result_hash->close();
+
+
+
+$sql_insert_hash = "insert into tb_env_envios (env_hash,env_dataenvio) values ('" .
+        hash_file("sha256","./teste.csv") . "',now())";
+
+$mysql_conn->query($sql_insert_hash);
 
 if ($mysql_conn->query($sql)) {
     echo "\n";
@@ -130,7 +193,6 @@ if ($mysql_conn->query($sql)) {
 } else {
     echo $mysql_conn->error;
 }
-
+syslog(LOG_INFO,"Tabela atualizada");
 // Logout
-$target = "https://entrada.sesisenaisp.org.br/dana-na/auth/logout.cgi";
-http_get_withheader($target,"");
+logout();
