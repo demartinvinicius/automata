@@ -1,0 +1,6 @@
+{
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.4",
+        "tecnickcom/tc-lib-pdf": "dev-master"
+    }
+}
