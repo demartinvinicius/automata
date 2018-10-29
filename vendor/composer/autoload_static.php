@@ -52,6 +52,10 @@ class ComposerStaticInit1c4dd2ae510ef0f6790dbeb0edcbb9e6
     );
 
     public static $prefixLengthsPsr4 = array (
+        'j' => 
+        array (
+            'joshtronic\\' => 11,
+        ),
         'P' => 
         array (
             'Psr\\SimpleCache\\' => 16,
@@ -64,6 +68,10 @@ class ComposerStaticInit1c4dd2ae510ef0f6790dbeb0edcbb9e6
     );
 
     public static $prefixDirsPsr4 = array (
+        'joshtronic\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/joshtronic/php-loremipsum/src',
+        ),
         'Psr\\SimpleCache\\' => 
         array (
             0 => __DIR__ . '/..' . '/psr/simple-cache/src',
